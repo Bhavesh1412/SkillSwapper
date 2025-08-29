@@ -32,7 +32,7 @@ const verifyToken = (token) => {
 };
 
 //Authentication middleware
-const authenticateTokens = async (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
     try {
         // Get token from headers
         const authHeader = req.headers['authorization'];
