@@ -14,17 +14,17 @@ const generateToken = (userId) => {
         {
             expiresIn: JWT_EXPIRES_IN,
             issuer: 'skillswapper',
-            audience : 'skillswapper-users',
-        }           
+            audience: 'skillswapper-users',
+        }
     );
 };
 
 //JWT verification
 const verifyToken = (token) => {
     try {
-        return jwt.verify(token, JWT_SECRET , {
+        return jwt.verify(token, JWT_SECRET, {
             issuer: 'skillswapper',
-            audience : 'skillswapper-users',
+            audience: 'skillswapper-users',
         });
     } catch (error) {
         return null;
@@ -36,30 +36,30 @@ const authenticateTokens = async (req, res, next) => {
     try {
         // Get token from headers
         const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1]; 
+        const token = authHeader && authHeader.split(' ')[1];
 
         if (!token) {
-            return res.status(401).json({ 
-                success : false,
+            return res.status(401).json({
+                success: false,
                 message: 'No token provided, authorization denied',
             });
         }
 
         //verify here
         const decoded = veriftToken(token);;
-        if(!decoded) {
-            return res.status(401).json({ 
-                success : false,
-                message: 'Invalid or Expired token', 
+        if (!decoded) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid or Expired token',
             });
         }
-        
+
         //get user + attach to request 
         const user = await User.findById(decoded.UserId);
         if (!user) {
-            return res.status(401).json({ 
-                success : false,
-                message: 'User not found, authorization denied', 
+            return res.status(401).json({
+                success: false,
+                message: 'User not found, authorization denied',
             });
         }
 
@@ -67,9 +67,9 @@ const authenticateTokens = async (req, res, next) => {
         next();
     } catch (error) {
         console.error('Authentication error:', error);
-        res.status(500).json({ 
-            success : false,
-            message: 'Authentication error', 
+        res.status(500).json({
+            success: false,
+            message: 'Authentication error',
         });
     }
 };
@@ -81,12 +81,12 @@ const optionalAuth = async (req, res, next) => {
     try {
         const authHearder = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
-        
-        if(token){
+
+        if (token) {
             const decoded = verifyToken(token);
-            if(decoded){
+            if (decoded) {
                 const user = await User.findById(decoded.UserId);
-                if(user){
+                if (user) {
                     req.user = user;
                 }
             }
@@ -94,8 +94,8 @@ const optionalAuth = async (req, res, next) => {
 
         next();
     } catch (error) {
-        
-        
+
+
         //ignore auth error for optional authentication
         next();
     }
@@ -109,10 +109,10 @@ const requireOwnership = (req, res, next) => {
     const resourceUserId = parseInt(req.params.id || req.params.userId);
     const currentUser = req.user.id;
 
-    if(resourceUserId !== currentUserId) {
+    if (resourceUserId !== currentUserId) {
         return res.status(403).json({
-            success : false,
-            message : 'You do not have permission to modify this resource',
+            success: false,
+            message: 'You do not have permission to modify this resource',
         });
     }
 

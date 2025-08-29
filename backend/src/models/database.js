@@ -1,13 +1,13 @@
 // MySQL database connection and query utilities
 
-const mysql = require('mysql2/promise');
+const mysql = require("mysql2/promise");
 
 // Created a connection pool for connection management here
 const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'skillswapper',
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
+    database: process.env.DB_NAME || "skillswapper",
     port: process.env.DB_PORT || 3306,
     waitForConnections: true,
     connectionLimit: 10,
@@ -17,20 +17,23 @@ const pool = mysql.createPool({
     timeout: 60000,
     reconnect: true,
     // SSL settings for production..
-    ssl: process.env.NODE_ENV === 'production' ? {
-        rejectUnauthorized: false
-    } : false
+    ssl:
+        process.env.NODE_ENV === "production"
+            ? {
+                rejectUnauthorized: false,
+            }
+            : false,
 });
 
 // Test database connection
 const testConnection = async () => {
     try {
         const connection = await pool.getConnection();
-        console.log('✅ Database connected successfully');
+        console.log("✅ Database connected successfully");
         connection.release();
         return true;
     } catch (error) {
-        console.error('❌ Database connection failed:', error.message);
+        console.error("❌ Database connection failed:", error.message);
         return false;
     }
 };
@@ -41,11 +44,10 @@ const query = async (sql, params = []) => {
         const [rows] = await pool.execute(sql, params);
         return rows;
     } catch (error) {
-        console.error('Database query error:', error.message);
-        throw new Error('Database operation failed');
+        console.error("Database query error:", error.message);
+        throw new Error("Database operation failed");
     }
 };
-
 
 // User model with all CRUD operations
 
@@ -57,31 +59,38 @@ const User = {
             INSERT INTO users (name, email, password_hash, bio, location) 
             VALUES (?, ?, ?, ?, ?)
         `;
-        const result = await query(sql, [name, email, password_hash, bio || null, location || null]);
+        const result = await query(sql, [
+            name,
+            email,
+            password_hash,
+            bio || null,
+            location || null,
+        ]);
         return result.insertId;
     },
 
     // Find user by email (for authentication)
     async findByEmail(email) {
-        const sql = 'SELECT * FROM users WHERE email = ?';
+        const sql = "SELECT * FROM users WHERE email = ?";
         const users = await query(sql, [email]);
         return users[0] || null;
     },
 
     // Find user by ID
     async findById(id) {
-        const sql = 'SELECT id, name, email, bio, location, profile_pic, created_at FROM users WHERE id = ?';
+        const sql =
+            "SELECT id, name, email, bio, location, profile_pic, created_at FROM users WHERE id = ?";
         const users = await query(sql, [id]);
         return users[0] || null;
     },
 
     // Update user profile
     async update(id, updates) {
-        const allowedFields = ['name', 'bio', 'location', 'profile_pic'];
+        const allowedFields = ["name", "bio", "location", "profile_pic"];
         const updateFields = [];
         const values = [];
 
-        Object.keys(updates).forEach(key => {
+        Object.keys(updates).forEach((key) => {
             if (allowedFields.includes(key) && updates[key] !== undefined) {
                 updateFields.push(`${key} = ?`);
                 values.push(updates[key]);
@@ -89,12 +98,12 @@ const User = {
         });
 
         if (updateFields.length === 0) {
-            throw new Error('No valid fields to update');
+            throw new Error("No valid fields to update");
         }
 
         values.push(id);
-        const sql = `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`;
-        
+        const sql = `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`;
+
         await query(sql, values);
         return this.findById(id);
     },
@@ -125,44 +134,43 @@ const User = {
         return {
             ...user,
             skills_have: skillsHave,
-            skills_want: skillsWant
+            skills_want: skillsWant,
         };
-    }
+    },
 };
 
 // SKILLS MODEL .......
 const Skill = {
-
     // All skills Get
     async getAll() {
-        const sql = 'SELECT * FROM skills ORDER BY skill_name';
+        const sql = "SELECT * FROM skills ORDER BY skill_name";
         return await query(sql);
     },
 
     // Find or create skill
     async findOrCreate(skillName) {
         const normalizedName = skillName.trim().toLowerCase();
-        
+
         // Try to find existing skill (with implementing case insesnitivity
-        let sql = 'SELECT * FROM skills WHERE LOWER(skill_name) = ?';
+        let sql = "SELECT * FROM skills WHERE LOWER(skill_name) = ?";
         let skills = await query(sql, [normalizedName]);
-        
+
         if (skills.length > 0) {
             return skills[0];
         }
 
         // Createing new skill
-        sql = 'INSERT INTO skills (skill_name) VALUES (?)';
+        sql = "INSERT INTO skills (skill_name) VALUES (?)";
         const result = await query(sql, [skillName]);
-        
+
         return {
             id: result.insertId,
-            skill_name: skillName
+            skill_name: skillName,
         };
     },
 
     // Add skill to user's "have" list
-    async addToUserHave(userId, skillId, proficiencyLevel = 'intermediate') {
+    async addToUserHave(userId, skillId, proficiencyLevel = "intermediate") {
         const sql = `
             INSERT INTO user_skills_have (user_id, skill_id, proficiency_level) 
             VALUES (?, ?, ?) 
@@ -172,7 +180,7 @@ const Skill = {
     },
 
     // Add skill to user's "want" list
-    async addToUserWant(userId, skillId, urgencyLevel = 'medium') {
+    async addToUserWant(userId, skillId, urgencyLevel = "medium") {
         const sql = `
             INSERT INTO user_skills_want (user_id, skill_id, urgency_level) 
             VALUES (?, ?, ?) 
@@ -183,23 +191,23 @@ const Skill = {
 
     // Remove skill from user's "have" list
     async removeFromUserHave(userId, skillId) {
-        const sql = 'DELETE FROM user_skills_have WHERE user_id = ? AND skill_id = ?';
+        const sql =
+            "DELETE FROM user_skills_have WHERE user_id = ? AND skill_id = ?";
         await query(sql, [userId, skillId]);
     },
 
     // Remove skill from user's "want" list
     async removeFromUserWant(userId, skillId) {
-        const sql = 'DELETE FROM user_skills_want WHERE user_id = ? AND skill_id = ?';
+        const sql =
+            "DELETE FROM user_skills_want WHERE user_id = ? AND skill_id = ?";
         await query(sql, [userId, skillId]);
-    }
+    },
 };
 
 // Matching for finding users
 //MAtch type done here is reciprocal mattching
 
-
 const Match = {
-    
     async findMatches(userId) {
         const sql = `
             SELECT DISTINCT 
@@ -224,7 +232,7 @@ const Match = {
             ORDER BY COUNT(DISTINCT s_common_have.id) + COUNT(DISTINCT s_common_want.id) DESC
             LIMIT 20
         `;
-        
+
         return await query(sql, [userId, userId, userId]);
     },
 
@@ -237,9 +245,9 @@ const Match = {
                 matched_skills = VALUES(matched_skills),
                 updated_at = CURRENT_TIMESTAMP
         `;
-        
+
         await query(sql, [user1Id, user2Id, JSON.stringify(matchedSkills)]);
-    }
+    },
 };
 
 // Document model
@@ -251,8 +259,15 @@ const Document = {
             INSERT INTO documents (user_id, file_name, file_path, file_type, file_size, skill_id) 
             VALUES (?, ?, ?, ?, ?, ?)
         `;
-        
-        const result = await query(sql, [userId, file_name, file_path, file_type, file_size, skill_id || null]);
+
+        const result = await query(sql, [
+            userId,
+            file_name,
+            file_path,
+            file_type,
+            file_size,
+            skill_id || null,
+        ]);
         return result.insertId;
     },
 
@@ -265,9 +280,9 @@ const Document = {
             WHERE d.user_id = ? 
             ORDER BY d.uploaded_at DESC
         `;
-        
+
         return await query(sql, [userId]);
-    }
+    },
 };
 
 // Initialize database connection
@@ -280,5 +295,5 @@ module.exports = {
     User,
     Skill,
     Match,
-    Document
+    Document,
 };

@@ -68,8 +68,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
+    res.json({
+        status: 'OK',
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development'
     });
@@ -111,17 +111,17 @@ process.on('SIGINT', () => {
 const server = app.listen(PORT, () => {
     console.log(`🚀 SkillSwapper API running on port ${PORT}`);
     console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-   
+
     // console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);   
     // 
-    
+
     // --------- port 3000 will be set in production by mistake.. avoid ing this conflict we write the below code   .....
 
 
 
     if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
-    throw new Error("FRONTEND_URL must be set in production!");
-}
+        throw new Error("FRONTEND_URL must be set in production!");
+    }
 
 });
 

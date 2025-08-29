@@ -7,7 +7,7 @@ const validateRegistration = [
         .withMessage('Name must be between 2 and 100 characters')
         .matches(/^[a-zA-Z\s]+$/)
         .withMessage('Name can only contain letters and spaces'),
-    
+
     body('password')
         .isLength({ min: 8, max: 128 })
         .withMessage('Password must be between 8 and 128 characters')
@@ -18,7 +18,7 @@ const validateRegistration = [
         .isEmail()
         .normalizeEmail()
         .withMessage('Invalid email address'),
-    
+
     body('bio')
         .optional()
         .trim()
@@ -33,16 +33,16 @@ const validateRegistration = [
 
     body('skills-have')
         .optional()
-        .isArray({min: 0, max: 20 })
+        .isArray({ min: 0, max: 20 })
         .withMessage('You can have atmost 20 skills '),
 
     body('skills-want')
         .optional()
-        .isArray({min: 0, max: 20 })
+        .isArray({ min: 0, max: 20 })
         .withMessage('You can want atmost 20 skills '),
 
 
-        handleValidationErrors
+    handleValidationErrors
 ];
 
 
@@ -70,7 +70,7 @@ const validateProfileUpdate = [
         .trim()
         .isLength({ min: 2, max: 100 })
         .withMessage('Name must be between 2 and 100 characters'),
-  
+
     body('bio')
         .optional()
         .trim()
