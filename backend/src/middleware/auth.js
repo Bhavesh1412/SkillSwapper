@@ -1,6 +1,6 @@
 // JWT middleware authenticattion
 
-const JWT = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 const { User } = require('../models/database');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
@@ -9,7 +9,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 //JWT generation 
 const generateToken = (userId) => {
     return jwt.sign(
-        { UserId },
+        { userId },
         JWT_SECRET,
         {
             expiresIn: JWT_EXPIRES_IN,
@@ -46,7 +46,7 @@ const authenticateToken = async (req, res, next) => {
         }
 
         //verify here
-        const decoded = veriftToken(token);;
+        const decoded = verifyToken(token);
         if (!decoded) {
             return res.status(401).json({
                 success: false,
@@ -79,13 +79,13 @@ const authenticateToken = async (req, res, next) => {
 
 const optionalAuth = async (req, res, next) => {
     try {
-        const authHearder = req.headers['authorization'];
+        const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
 
         if (token) {
             const decoded = verifyToken(token);
             if (decoded) {
-                const user = await User.findById(decoded.UserId);
+                const user = await User.findById(decoded.userId);
                 if (user) {
                     req.user = user;
                 }
@@ -107,7 +107,7 @@ const optionalAuth = async (req, res, next) => {
 
 const requireOwnership = (req, res, next) => {
     const resourceUserId = parseInt(req.params.id || req.params.userId);
-    const currentUser = req.user.id;
+    const currentUserId = req.user.id;
 
     if (resourceUserId !== currentUserId) {
         return res.status(403).json({
@@ -126,3 +126,4 @@ module.exports = {
     optionalAuth,
     requireOwnership,
 };
+
