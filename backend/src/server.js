@@ -11,7 +11,7 @@ const path = require('path');
 
 // Import routes
 const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
+const userRoutes = require('./routes/user');
 const skillRoutes = require('./routes/skills');
 const matchRoutes = require('./routes/matches');
 const uploadRoutes = require('./routes/upload');

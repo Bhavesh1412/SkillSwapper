@@ -51,7 +51,7 @@ router.post("/register", validateRegistration, async (req, res) => {
       for (const skillData of skills_have) {
         const skill = await Skill.findOrCreate(skillData.name || skillData);
         await Skill.addToUserHave(
-          newUserId,
+          userId,
           skill.id,
           skillData.level || "beginner"
         );
@@ -63,7 +63,7 @@ router.post("/register", validateRegistration, async (req, res) => {
       for (const skillData of skills_want) {
         const skill = await Skill.findOrCreate(skillData.name || skillData);
         await Skill.addToUserWant(
-          newUserId,
+          userId,
           skill.id,
           skillData.urgency || "beginner"
         );

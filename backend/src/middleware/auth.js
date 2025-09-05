@@ -122,7 +122,7 @@ const requireOwnership = (req, res, next) => {
 module.exports = {
     generateToken,
     verifyToken,
-    authenticateTokens,
+    authenticateToken,
     optionalAuth,
     requireOwnership,
 };

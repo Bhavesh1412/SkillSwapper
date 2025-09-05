@@ -15,10 +15,7 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 12;
  * @returns {string} JWT token
  */
 const generateToken = (userId) => {
-    return jwt.sign(
-        { userId },
-        JWT_SECRET,
-        {
+    return jwt.sign({ userId }, JWT_SECRET, {
             expiresIn: JWT_EXPIRES_IN,
             issuer: 'skillswapper',
             audience: 'skillswapper-users'

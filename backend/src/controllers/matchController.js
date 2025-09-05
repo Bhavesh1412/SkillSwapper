@@ -1,368 +1,805 @@
-// src/routes/auth.js - COMPLETE AUTH ROUTES
-const express = require('express');
-const { validateRegistration, validateLogin } = require('../middleware/validation');
-const { authenticateToken } = require('../middleware/auth');
-const {
-    register,
-    login,
-    verifyToken,
-    refreshToken,
-    changePassword,
-    logout
-} = require('../controllers/authController');
+// src/controllers/matchController.js
+// Matching system controller for finding and managing skill matches
 
-const router = express.Router();
+const { Match, User, query } = require('../models/database');
 
-// @route   POST /api/auth/register
-// @desc    Register a new user
-// @access  Public
-router.post('/register', validateRegistration, register);
+/**
+ * Get recommended matches for current user
+ * GET /api/matches
+ */
+const getMatches = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { 
+            limit = 10, 
+            offset = 0, 
+            minScore = 1,
+            location,
+            skill 
+        } = req.query;
 
-// @route   POST /api/auth/login
-// @desc    Login user and get token
-// @access  Public
-router.post('/login', validateLogin, login);
+        // Validate pagination parameters
+        const limitNum = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
+        const offsetNum = Math.max(parseInt(offset) || 0, 0);
+        const minScoreNum = Math.max(parseInt(minScore) || 1, 1);
 
-// @route   POST /api/auth/verify
-// @desc    Verify JWT token validity
-// @access  Public
-router.post('/verify', verifyToken);
+        // Build the matching query with optional filters
+        let sql = `
+            SELECT DISTINCT 
+                u.id,
+                u.name,
+                u.bio,
+                u.location,
+                u.profile_pic,
+                u.created_at,
+                GROUP_CONCAT(DISTINCT s_common_have.skill_name) as matching_skills_i_have,
+                GROUP_CONCAT(DISTINCT s_common_want.skill_name) as matching_skills_i_want,
+                COUNT(DISTINCT s_common_have.id) as skills_i_can_teach_them,
+                COUNT(DISTINCT s_common_want.id) as skills_they_can_teach_me
+            FROM users u
+            -- Find users who want skills that current user has
+            JOIN user_skills_want usw ON u.id = usw.user_id
+            JOIN user_skills_have ush_current ON usw.skill_id = ush_current.skill_id AND ush_current.user_id = ?
+            JOIN skills s_common_have ON ush_current.skill_id = s_common_have.id
+            -- And who have skills that current user wants
+            JOIN user_skills_have ush ON u.id = ush.user_id
+            JOIN user_skills_want usw_current ON ush.skill_id = usw_current.skill_id AND usw_current.user_id = ?
+            JOIN skills s_common_want ON ush.skill_id = s_common_want.id
+            WHERE u.id != ?
+        `;
 
-// @route   POST /api/auth/refresh
-// @desc    Refresh JWT token
-// @access  Public
-router.post('/refresh', refreshToken);
+        const params = [userId, userId, userId];
 
-// @route   POST /api/auth/change-password
-// @desc    Change user password
-// @access  Private
-router.post('/change-password', authenticateToken, changePassword);
+        // Add location filter if specified
+        if (location && location.trim()) {
+            sql += ' AND u.location LIKE ?';
+            params.push(`%${location.trim()}%`);
+        }
 
-// @route   POST /api/auth/logout
-// @desc    Logout user (client-side token invalidation)
-// @access  Private
-router.post('/logout', authenticateToken, logout);
+        // Add skill filter if specified
+        if (skill && skill.trim()) {
+            sql += ` AND (s_common_have.skill_name LIKE ? OR s_common_want.skill_name LIKE ?)`;
+            params.push(`%${skill.trim()}%`, `%${skill.trim()}%`);
+        }
 
-module.exports = router;
+        sql += `
+            GROUP BY u.id
+            HAVING skills_i_can_teach_them >= ? AND skills_they_can_teach_me >= ?
+            ORDER BY (skills_i_can_teach_them + skills_they_can_teach_me) DESC, u.name ASC
+            LIMIT ? OFFSET ?
+        `;
 
-// src/routes/users.js - COMPLETE USER ROUTES
-const express = require('express');
-const { authenticateToken, requireOwnership, optionalAuth } = require('../middleware/auth');
-const { validateProfileUpdate, validateId } = require('../middleware/validation');
-const {
-    getMe,
-    getUserProfile,
-    updateUserProfile,
-    getUserDocuments,
-    searchUsers,
-    getUserStats,
-    deleteUser
-} = require('../controllers/userController');
+        params.push(minScoreNum, minScoreNum, limitNum, offsetNum);
 
-const router = express.Router();
+        const matches = await query(sql, params);
 
-// @route   GET /api/users/me
-// @desc    Get current user's profile
-// @access  Private
-router.get('/me', authenticateToken, getMe);
+        // Process matches to include detailed match information
+        const processedMatches = matches.map(match => {
+            const skillsIHave = match.matching_skills_i_have ? 
+                match.matching_skills_i_have.split(',') : [];
+            const skillsIWant = match.matching_skills_i_want ? 
+                match.matching_skills_i_want.split(',') : [];
 
-// @route   GET /api/users/profile/:id
-// @desc    Get user profile by ID (public view)
-// @access  Public (but enhanced if authenticated)
-router.get('/profile/:id', validateId, optionalAuth, getUserProfile);
+            return {
+                user: {
+                    id: match.id,
+                    name: match.name,
+                    bio: match.bio,
+                    location: match.location,
+                    profile_pic: match.profile_pic,
+                    created_at: match.created_at
+                },
+                matchDetails: {
+                    skillsYouCanTeachThem: skillsIHave,
+                    skillsTheyCanTeachYou: skillsIWant,
+                    matchScore: parseInt(match.skills_i_can_teach_them) + parseInt(match.skills_they_can_teach_me),
+                    mutualSkillsCount: Math.min(skillsIHave.length, skillsIWant.length),
+                    compatibility: calculateCompatibility(skillsIHave.length, skillsIWant.length)
+                }
+            };
+        });
 
-// @route   PUT /api/users/profile/:id
-// @desc    Update user profile
-// @access  Private (own profile only)
-router.put('/profile/:id', validateId, authenticateToken, requireOwnership, validateProfileUpdate, updateUserProfile);
+        // Get total count for pagination
+        let countSql = `
+            SELECT COUNT(DISTINCT u.id) as total
+            FROM users u
+            JOIN user_skills_want usw ON u.id = usw.user_id
+            JOIN user_skills_have ush_current ON usw.skill_id = ush_current.skill_id AND ush_current.user_id = ?
+            JOIN user_skills_have ush ON u.id = ush.user_id
+            JOIN user_skills_want usw_current ON ush.skill_id = usw_current.skill_id AND usw_current.user_id = ?
+            WHERE u.id != ?
+        `;
 
-// @route   GET /api/users/:id/documents
-// @desc    Get user's documents
-// @access  Private (own documents only)
-router.get('/:id/documents', validateId, authenticateToken, requireOwnership, getUserDocuments);
+        const countParams = [userId, userId, userId];
 
-// @route   GET /api/users/:id/stats
-// @desc    Get user statistics
-// @access  Public (but enhanced for own profile)
-router.get('/:id/stats', validateId, optionalAuth, getUserStats);
+        if (location && location.trim()) {
+            countSql += ' AND u.location LIKE ?';
+            countParams.push(`%${location.trim()}%`);
+        }
 
-// @route   GET /api/users/search
-// @desc    Search users by skills, location, or name
-// @access  Public
-router.get('/search', optionalAuth, searchUsers);
+        if (skill && skill.trim()) {
+            countSql += ` AND EXISTS (
+                SELECT 1 FROM skills s 
+                WHERE s.skill_name LIKE ? 
+                AND (s.id IN (SELECT skill_id FROM user_skills_have WHERE user_id = ush_current.user_id)
+                     OR s.id IN (SELECT skill_id FROM user_skills_have WHERE user_id = u.id))
+            )`;
+            countParams.push(`%${skill.trim()}%`);
+        }
 
-// @route   DELETE /api/users/:id
-// @desc    Delete user account
-// @access  Private (own account only)
-router.delete('/:id', validateId, authenticateToken, requireOwnership, deleteUser);
+        const [{ total }] = await query(countSql, countParams);
 
-module.exports = router;
+        res.json({
+            success: true,
+            data: {
+                matches: processedMatches,
+                pagination: {
+                    total: parseInt(total),
+                    limit: limitNum,
+                    offset: offsetNum,
+                    hasMore: offsetNum + limitNum < total,
+                    totalPages: Math.ceil(total / limitNum),
+                    currentPage: Math.floor(offsetNum / limitNum) + 1
+                },
+                filters: {
+                    minScore: minScoreNum,
+                    location: location || null,
+                    skill: skill || null
+                }
+            }
+        });
 
-// src/routes/skills.js - COMPLETE SKILLS ROUTES
-const express = require('express');
-const { authenticateToken } = require('../middleware/auth');
-const { validateSkills } = require('../middleware/validation');
-const {
-    getAllSkills,
-    addSkillsToHave,
-    addSkillsToWant,
-    removeSkillFromHave,
-    removeSkillFromWant,
-    updateProficiency,
-    updateUrgency,
-    getSkillSuggestions,
-    getSkillStats
-} = require('../controllers/skillController');
+    } catch (error) {
+        console.error('Get matches error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch matches',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
 
-const router = express.Router();
+/**
+ * Get detailed match information between current user and specific user
+ * GET /api/matches/detailed/:userId
+ */
+const getDetailedMatch = async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const targetUserId = parseInt(req.params.userId);
 
-// @route   GET /api/skills
-// @desc    Get all available skills with optional search
-// @access  Public
-router.get('/', getAllSkills);
+        if (isNaN(targetUserId) || targetUserId < 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user ID'
+            });
+        }
 
-// @route   GET /api/skills/suggestions
-// @desc    Get skill suggestions for user
-// @access  Private
-router.get('/suggestions', authenticateToken, getSkillSuggestions);
+        if (currentUserId === targetUserId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot match with yourself'
+            });
+        }
 
-// @route   GET /api/skills/:skillId/stats
-// @desc    Get statistics for a specific skill
-// @access  Public
-router.get('/:skillId/stats', getSkillStats);
+        // Get both users with their skills
+        const [currentUser, targetUser] = await Promise.all([
+            User.getWithSkills(currentUserId),
+            User.getWithSkills(targetUserId)
+        ]);
 
-// @route   POST /api/skills/add-to-have
-// @desc    Add skills to user's "have" list
-// @access  Private
-router.post('/add-to-have', authenticateToken, validateSkills, addSkillsToHave);
+        if (!targetUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'Target user not found'
+            });
+        }
 
-// @route   POST /api/skills/add-to-want
-// @desc    Add skills to user's "want" list
-// @access  Private
-router.post('/add-to-want', authenticateToken, validateSkills, addSkillsToWant);
+        // Calculate detailed match information
+        const currentUserHaveSkills = currentUser.skills_have?.map(s => s.skill_name.toLowerCase()) || [];
+        const currentUserWantSkills = currentUser.skills_want?.map(s => s.skill_name.toLowerCase()) || [];
+        const targetUserHaveSkills = targetUser.skills_have?.map(s => s.skill_name.toLowerCase()) || [];
+        const targetUserWantSkills = targetUser.skills_want?.map(s => s.skill_name.toLowerCase()) || [];
 
-// @route   DELETE /api/skills/remove-from-have/:skillId
-// @desc    Remove skill from user's "have" list
-// @access  Private
-router.delete('/remove-from-have/:skillId', authenticateToken, removeSkillFromHave);
+        // Find overlapping skills with detailed information
+        const skillsYouCanTeachThem = currentUser.skills_have?.filter(skill => 
+            targetUserWantSkills.includes(skill.skill_name.toLowerCase())
+        ).map(skill => ({
+            ...skill,
+            demandLevel: targetUser.skills_want?.find(s => 
+                s.skill_name.toLowerCase() === skill.skill_name.toLowerCase()
+            )?.urgency_level || 'medium'
+        })) || [];
 
-// @route   DELETE /api/skills/remove-from-want/:skillId
-// @desc    Remove skill from user's "want" list
-// @access  Private
-router.delete('/remove-from-want/:skillId', authenticateToken, removeSkillFromWant);
+        const skillsTheyCanTeachYou = targetUser.skills_have?.filter(skill => 
+            currentUserWantSkills.includes(skill.skill_name.toLowerCase())
+        ).map(skill => ({
+            ...skill,
+            yourInterestLevel: currentUser.skills_want?.find(s => 
+                s.skill_name.toLowerCase() === skill.skill_name.toLowerCase()
+            )?.urgency_level || 'medium'
+        })) || [];
 
-// @route   PUT /api/skills/update-proficiency
-// @desc    Update proficiency level for a skill user has
-// @access  Private
-router.put('/update-proficiency', authenticateToken, updateProficiency);
+        // Calculate match metrics
+        const matchScore = skillsYouCanTeachThem.length + skillsTheyCanTeachYou.length;
+        const isValidMatch = skillsYouCanTeachThem.length > 0 && skillsTheyCanTeachYou.length > 0;
+        const compatibility = calculateCompatibility(skillsYouCanTeachThem.length, skillsTheyCanTeachYou.length);
 
-// @route   PUT /api/skills/update-urgency
-// @desc    Update urgency level for a skill user wants
-// @access  Private
-router.put('/update-urgency', authenticateToken, updateUrgency);
+        // Calculate skill level compatibility
+        const skillLevelCompatibility = calculateSkillLevelCompatibility(
+            skillsYouCanTeachThem,
+            skillsTheyCanTeachYou
+        );
 
-module.exports = router;
+        res.json({
+            success: true,
+            data: {
+                targetUser: {
+                    id: targetUser.id,
+                    name: targetUser.name,
+                    bio: targetUser.bio,
+                    location: targetUser.location,
+                    profile_pic: targetUser.profile_pic,
+                    skills_have: targetUser.skills_have,
+                    skills_want: targetUser.skills_want,
+                    created_at: targetUser.created_at
+                },
+                matchAnalysis: {
+                    isValidMatch,
+                    matchScore,
+                    compatibility,
+                    skillLevelCompatibility,
+                    skillsYouCanTeachThem,
+                    skillsTheyCanTeachYou,
+                    mutualBenefit: {
+                        yourSkillsTheyWant: skillsYouCanTeachThem.length,
+                        theirSkillsYouWant: skillsTheyCanTeachYou.length,
+                        balanceScore: Math.abs(skillsYouCanTeachThem.length - skillsTheyCanTeachYou.length)
+                    },
+                    recommendations: generateMatchRecommendations(
+                        skillsYouCanTeachThem,
+                        skillsTheyCanTeachYou,
+                        currentUser,
+                        targetUser
+                    )
+                }
+            }
+        });
 
-// src/routes/matches.js - COMPLETE MATCHING ROUTES
-const express = require('express');
-const { authenticateToken } = require('../middleware/auth');
-const {
+    } catch (error) {
+        console.error('Get detailed match error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get match details',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Save a potential match for future reference
+ * POST /api/matches/save
+ */
+const saveMatch = async (req, res) => {
+    try {
+        const user1Id = req.user.id;
+        const { user2Id, note } = req.body;
+
+        if (!user2Id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Target user ID is required'
+            });
+        }
+
+        const targetUserId = parseInt(user2Id);
+        if (isNaN(targetUserId) || targetUserId < 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid target user ID'
+            });
+        }
+
+        if (user1Id === targetUserId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot match with yourself'
+            });
+        }
+
+        // Verify target user exists
+        const targetUser = await User.findById(targetUserId);
+        if (!targetUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'Target user not found'
+            });
+        }
+
+        // Check if match already exists
+        const existingMatch = await query(
+            'SELECT * FROM matches WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)',
+            [user1Id, targetUserId, targetUserId, user1Id]
+        );
+
+        if (existingMatch.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: 'Match already exists',
+                data: {
+                    matchId: existingMatch[0].id,
+                    status: existingMatch[0].status
+                }
+            });
+        }
+
+        // Calculate matched skills
+        const currentUser = await User.getWithSkills(user1Id);
+        const targetUserWithSkills = await User.getWithSkills(targetUserId);
+
+        const currentUserHaveSkills = currentUser.skills_have?.map(s => s.skill_name.toLowerCase()) || [];
+        const currentUserWantSkills = currentUser.skills_want?.map(s => s.skill_name.toLowerCase()) || [];
+        const targetUserHaveSkills = targetUserWithSkills.skills_have?.map(s => s.skill_name.toLowerCase()) || [];
+        const targetUserWantSkills = targetUserWithSkills.skills_want?.map(s => s.skill_name.toLowerCase()) || [];
+
+        const skillsYouCanTeachThem = currentUser.skills_have?.filter(skill => 
+            targetUserWantSkills.includes(skill.skill_name.toLowerCase())
+        ).map(s => ({
+            name: s.skill_name,
+            proficiency: s.proficiency_level
+        })) || [];
+
+        const skillsTheyCanTeachYou = targetUserWithSkills.skills_have?.filter(skill => 
+            currentUserWantSkills.includes(skill.skill_name.toLowerCase())
+        ).map(s => ({
+            name: s.skill_name,
+            proficiency: s.proficiency_level
+        })) || [];
+
+        const matchedSkills = {
+            skillsYouCanTeachThem,
+            skillsTheyCanTeachYou,
+            matchScore: skillsYouCanTeachThem.length + skillsTheyCanTeachYou.length,
+            note: note || null,
+            createdAt: new Date().toISOString()
+        };
+
+        // Save the match
+        await Match.create(user1Id, targetUserId, matchedSkills);
+
+        res.json({
+            success: true,
+            message: 'Match saved successfully',
+            data: {
+                matchedWith: {
+                    id: targetUser.id,
+                    name: targetUser.name,
+                    profile_pic: targetUser.profile_pic
+                },
+                matchDetails: matchedSkills
+            }
+        });
+
+    } catch (error) {
+        console.error('Save match error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to save match',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Get saved matches for current user
+ * GET /api/matches/saved
+ */
+const getSavedMatches = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { status, limit = 20, offset = 0 } = req.query;
+
+        // Validate parameters
+        const limitNum = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
+        const offsetNum = Math.max(parseInt(offset) || 0, 0);
+
+        let sql = `
+            SELECT m.*, 
+                   u1.name as user1_name, u1.profile_pic as user1_pic,
+                   u2.name as user2_name, u2.profile_pic as user2_pic
+            FROM matches m
+            JOIN users u1 ON m.user1_id = u1.id
+            JOIN users u2 ON m.user2_id = u2.id
+            WHERE m.user1_id = ? OR m.user2_id = ?
+        `;
+
+        const params = [userId, userId];
+
+        // Add status filter if specified
+        if (status && ['pending', 'accepted', 'declined', 'expired'].includes(status)) {
+            sql += ' AND m.status = ?';
+            params.push(status);
+        }
+
+        sql += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
+        params.push(limitNum, offsetNum);
+
+        const savedMatches = await query(sql, params);
+
+        // Process matches to show the other user's information
+        const processedMatches = savedMatches.map(match => {
+            const isCurrentUserInitiator = match.user1_id === userId;
+            const otherUser = {
+                id: isCurrentUserInitiator ? match.user2_id : match.user1_id,
+                name: isCurrentUserInitiator ? match.user2_name : match.user1_name,
+                profile_pic: isCurrentUserInitiator ? match.user2_pic : match.user1_pic
+            };
+
+            return {
+                id: match.id,
+                otherUser,
+                matchDetails: JSON.parse(match.matched_skills),
+                status: match.status,
+                isInitiator: isCurrentUserInitiator,
+                created_at: match.created_at,
+                updated_at: match.updated_at
+            };
+        });
+
+        // Get total count
+        let countSql = `
+            SELECT COUNT(*) as total FROM matches m 
+            WHERE m.user1_id = ? OR m.user2_id = ?
+        `;
+        const countParams = [userId, userId];
+
+        if (status && ['pending', 'accepted', 'declined', 'expired'].includes(status)) {
+            countSql += ' AND m.status = ?';
+            countParams.push(status);
+        }
+
+        const [{ total }] = await query(countSql, countParams);
+
+        res.json({
+            success: true,
+            data: {
+                matches: processedMatches,
+                pagination: {
+                    total: parseInt(total),
+                    limit: limitNum,
+                    offset: offsetNum,
+                    hasMore: offsetNum + limitNum < total
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Get saved matches error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch saved matches',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Update match status
+ * PUT /api/matches/:matchId/status
+ */
+const updateMatchStatus = async (req, res) => {
+    try {
+        const matchId = parseInt(req.params.matchId);
+        const { status } = req.body;
+        const userId = req.user.id;
+
+        if (isNaN(matchId) || matchId < 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid match ID'
+            });
+        }
+
+        const validStatuses = ['accepted', 'declined', 'expired'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+            });
+        }
+
+        // Get match and verify user is part of it
+        const matches = await query(
+            'SELECT * FROM matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)',
+            [matchId, userId, userId]
+        );
+
+        if (matches.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Match not found or access denied'
+            });
+        }
+
+        const match = matches[0];
+
+        // Update match status
+        await query(
+            'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [status, matchId]
+        );
+
+        res.json({
+            success: true,
+            message: `Match ${status} successfully`,
+            data: {
+                matchId,
+                newStatus: status,
+                updatedAt: new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error('Update match status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update match status',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Get matching statistics for current user
+ * GET /api/matches/statistics
+ */
+const getMatchingStatistics = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // Get all potential matches
+        const allMatches = await Match.findMatches(userId);
+        
+        // Get saved matches count by status
+        const savedMatchesStats = await query(`
+            SELECT status, COUNT(*) as count
+            FROM matches 
+            WHERE user1_id = ? OR user2_id = ?
+            GROUP BY status
+        `, [userId, userId]);
+
+        // Get user's skills for analysis
+        const userWithSkills = await User.getWithSkills(userId);
+        
+        // Calculate statistics
+        const stats = {
+            totalPotentialMatches: allMatches.length,
+            savedMatches: savedMatchesStats.reduce((acc, item) => {
+                acc[item.status] = item.count;
+                acc.total = (acc.total || 0) + item.count;
+                return acc;
+            }, {}),
+            skillsYouCanTeach: new Set(),
+            skillsYouCanLearn: new Set(),
+            averageMatchScore: 0,
+            topMatchingSkills: {},
+            matchQualityDistribution: {
+                excellent: 0,    // 5+ overlapping skills
+                good: 0,         // 3-4 overlapping skills
+                average: 0,      // 2 overlapping skills
+                basic: 0         // 1 overlapping skill
+            }
+        };
+
+        let totalMatchScore = 0;
+
+        allMatches.forEach(match => {
+            const skillsIHave = match.matching_skills_i_have ? 
+                match.matching_skills_i_have.split(',') : [];
+            const skillsIWant = match.matching_skills_i_want ? 
+                match.matching_skills_i_want.split(',') : [];
+
+            // Track unique skills
+            skillsIHave.forEach(skill => stats.skillsYouCanTeach.add(skill.trim()));
+            skillsIWant.forEach(skill => stats.skillsYouCanLearn.add(skill.trim()));
+
+            // Track skill popularity for teaching
+            skillsIHave.forEach(skill => {
+                const trimmedSkill = skill.trim();
+                stats.topMatchingSkills[trimmedSkill] = (stats.topMatchingSkills[trimmedSkill] || 0) + 1;
+            });
+
+            const matchScore = skillsIHave.length + skillsIWant.length;
+            totalMatchScore += matchScore;
+
+            // Categorize match quality
+            if (matchScore >= 5) stats.matchQualityDistribution.excellent++;
+            else if (matchScore >= 3) stats.matchQualityDistribution.good++;
+            else if (matchScore >= 2) stats.matchQualityDistribution.average++;
+            else stats.matchQualityDistribution.basic++;
+        });
+
+        // Convert sets to arrays and calculate averages
+        stats.skillsYouCanTeach = Array.from(stats.skillsYouCanTeach);
+        stats.skillsYouCanLearn = Array.from(stats.skillsYouCanLearn);
+        stats.averageMatchScore = allMatches.length > 0 ? 
+            (totalMatchScore / allMatches.length).toFixed(2) : 0;
+
+        // Sort top matching skills
+        const sortedSkills = Object.entries(stats.topMatchingSkills)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([skill, count]) => ({ skill, demandCount: count }));
+        
+        stats.topMatchingSkills = sortedSkills;
+
+        // Add profile completion recommendation
+        stats.profileRecommendations = generateProfileRecommendations(userWithSkills, allMatches.length);
+
+        res.json({
+            success: true,
+            data: { statistics: stats }
+        });
+
+    } catch (error) {
+        console.error('Get match statistics error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get match statistics',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+/**
+ * Calculate compatibility score between two users
+ * @param {number} skillsYouTeach - Number of skills you can teach them
+ * @param {number} skillsTheyTeach - Number of skills they can teach you
+ * @returns {number} Compatibility score (0-100)
+ */
+const calculateCompatibility = (skillsYouTeach, skillsTheyTeach) => {
+    if (skillsYouTeach === 0 || skillsTheyTeach === 0) return 0;
+    
+    const total = skillsYouTeach + skillsTheyTeach;
+    const balance = 1 - (Math.abs(skillsYouTeach - skillsTheyTeach) / Math.max(skillsYouTeach, skillsTheyTeach));
+    
+    // Score based on total skills and balance
+    const baseScore = Math.min(total * 15, 70); // Max 70 points for total skills
+    const balanceScore = balance * 30; // Max 30 points for balance
+    
+    return Math.round(baseScore + balanceScore);
+};
+
+/**
+ * Calculate skill level compatibility
+ * @param {Array} skillsYouTeach - Skills you can teach
+ * @param {Array} skillsTheyTeach - Skills they can teach
+ * @returns {Object} Skill level compatibility analysis
+ */
+const calculateSkillLevelCompatibility = (skillsYouTeach, skillsTheyTeach) => {
+    const levelValues = { beginner: 1, intermediate: 2, advanced: 3, expert: 4 };
+    
+    let yourAverageLevel = 0;
+    let theirAverageLevel = 0;
+    
+    if (skillsYouTeach.length > 0) {
+        yourAverageLevel = skillsYouTeach.reduce((sum, skill) => 
+            sum + (levelValues[skill.proficiency_level] || 2), 0) / skillsYouTeach.length;
+    }
+    
+    if (skillsTheyTeach.length > 0) {
+        theirAverageLevel = skillsTheyTeach.reduce((sum, skill) => 
+            sum + (levelValues[skill.proficiency_level] || 2), 0) / skillsTheyTeach.length;
+    }
+    
+    return {
+        yourAverageLevel: Number(yourAverageLevel.toFixed(1)),
+        theirAverageLevel: Number(theirAverageLevel.toFixed(1)),
+        levelBalance: Math.abs(yourAverageLevel - theirAverageLevel) <= 1 ? 'good' : 'unbalanced'
+    };
+};
+
+/**
+ * Generate match recommendations
+ * @param {Array} skillsYouTeach - Skills you can teach them
+ * @param {Array} skillsTheyTeach - Skills they can teach you
+ * @param {Object} currentUser - Current user data
+ * @param {Object} targetUser - Target user data
+ * @returns {Array} Array of recommendations
+ */
+const generateMatchRecommendations = (skillsYouTeach, skillsTheyTeach, currentUser, targetUser) => {
+    const recommendations = [];
+    
+    if (skillsYouTeach.length === 0) {
+        recommendations.push({
+            type: 'warning',
+            message: 'You have no skills that this user wants to learn'
+        });
+    }
+    
+    if (skillsTheyTeach.length === 0) {
+        recommendations.push({
+            type: 'warning', 
+            message: 'This user has no skills that you want to learn'
+        });
+    }
+    
+    if (skillsYouTeach.length > 0 && skillsTheyTeach.length > 0) {
+        recommendations.push({
+            type: 'success',
+            message: 'Great mutual match! You can both teach and learn from each other'
+        });
+    }
+    
+    if (currentUser.location && targetUser.location && 
+        currentUser.location.toLowerCase() === targetUser.location.toLowerCase()) {
+        recommendations.push({
+            type: 'info',
+            message: 'You\'re both in the same location - perfect for in-person sessions!'
+        });
+    }
+    
+    return recommendations;
+};
+
+/**
+ * Generate profile recommendations based on matching data
+ * @param {Object} user - User with skills data
+ * @param {number} matchCount - Number of potential matches
+ * @returns {Array} Array of profile improvement recommendations
+ */
+const generateProfileRecommendations = (user, matchCount) => {
+    const recommendations = [];
+    
+    if (!user.bio || user.bio.trim().length < 50) {
+        recommendations.push({
+            type: 'improvement',
+            message: 'Add a detailed bio to attract more matches',
+            impact: 'medium'
+        });
+    }
+    
+    if (!user.location) {
+        recommendations.push({
+            type: 'improvement',
+            message: 'Add your location to find nearby skill partners',
+            impact: 'high'
+        });
+    }
+    
+    if (!user.skills_have || user.skills_have.length < 3) {
+        recommendations.push({
+            type: 'improvement',
+            message: 'Add more skills you can teach to increase match opportunities',
+            impact: 'high'
+        });
+    }
+    
+    if (!user.skills_want || user.skills_want.length < 3) {
+        recommendations.push({
+            type: 'improvement', 
+            message: 'Add more skills you want to learn to find better matches',
+            impact: 'medium'
+        });
+    }
+    
+    if (matchCount === 0) {
+        recommendations.push({
+            type: 'suggestion',
+            message: 'Try adding more popular skills or adjusting your skill preferences',
+            impact: 'high'
+        });
+    }
+    
+    return recommendations;
+};
+
+module.exports = {
     getMatches,
     getDetailedMatch,
     saveMatch,
     getSavedMatches,
     updateMatchStatus,
-    getMatchingStatistics,
-    deleteMatch,
-    getMatchSuggestions
-} = require('../controllers/matchController');
-
-const router = express.Router();
-
-// @route   GET /api/matches
-// @desc    Get recommended matches for current user
-// @access  Private
-router.get('/', authenticateToken, getMatches);
-
-// @route   GET /api/matches/saved
-// @desc    Get saved matches for current user
-// @access  Private
-router.get('/saved', authenticateToken, getSavedMatches);
-
-// @route   GET /api/matches/statistics
-// @desc    Get matching statistics for current user
-// @access  Private
-router.get('/statistics', authenticateToken, getMatchingStatistics);
-
-// @route   GET /api/matches/suggestions
-// @desc    Get match suggestions based on user activity
-// @access  Private
-router.get('/suggestions', authenticateToken, getMatchSuggestions);
-
-// @route   GET /api/matches/detailed/:userId
-// @desc    Get detailed match information between current user and specific user
-// @access  Private
-router.get('/detailed/:userId', authenticateToken, getDetailedMatch);
-
-// @route   POST /api/matches/save
-// @desc    Save a potential match for future reference
-// @access  Private
-router.post('/save', authenticateToken, saveMatch);
-
-// @route   PUT /api/matches/:matchId/status
-// @desc    Update match status (accept, decline, etc.)
-// @access  Private
-router.put('/:matchId/status', authenticateToken, updateMatchStatus);
-
-// @route   DELETE /api/matches/:matchId
-// @desc    Delete a saved match
-// @access  Private
-router.delete('/:matchId', authenticateToken, deleteMatch);
-
-module.exports = router;
-
-// src/routes/upload.js - COMPLETE UPLOAD ROUTES
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs').promises;
-const { authenticateToken } = require('../middleware/auth');
-const {
-    uploadDocuments,
-    uploadProfilePicture,
-    getUserDocuments,
-    deleteDocument,
-    downloadDocument,
-    getUploadStats,
-    bulkDeleteDocuments,
-    serveFile
-} = require('../controllers/uploadController');
-
-const router = express.Router();
-
-// Ensure upload directory exists
-const ensureUploadDir = async (dir) => {
-    try {
-        await fs.access(dir);
-    } catch {
-        await fs.mkdir(dir, { recursive: true });
-    }
+    getMatchingStatistics
 };
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: async (req, file, cb) => {
-        const uploadDir = path.join(__dirname, '../../uploads');
-        await ensureUploadDir(uploadDir);
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        // Generate unique filename: userId_timestamp_originalname
-        const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const uniqueName = `${req.user.id}_${Date.now()}_${sanitizedName}`;
-        cb(null, uniqueName);
-    }
-});
-
-// File filter for security
-const fileFilter = (req, file, cb) => {
-    const allowedTypes = {
-        'image/jpeg': '.jpg',
-        'image/png': '.png',
-        'image/gif': '.gif',
-        'application/pdf': '.pdf',
-        'application/msword': '.doc',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-        'text/plain': '.txt'
-    };
-
-    if (allowedTypes[file.mimetype]) {
-        cb(null, true);
-    } else {
-        cb(new Error('Invalid file type. Only images, PDFs, and documents are allowed.'), false);
-    }
-};
-
-const upload = multer({
-    storage,
-    fileFilter,
-    limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB limit
-        files: 5 // Maximum 5 files per request
-    }
-});
-
-// @route   POST /api/upload/document
-// @desc    Upload supporting documents for skills
-// @access  Private
-router.post('/document', authenticateToken, upload.array('documents', 5), uploadDocuments);
-
-// @route   POST /api/upload/profile-picture
-// @desc    Upload profile picture
-// @access  Private
-router.post('/profile-picture', authenticateToken, upload.single('profilePicture'), uploadProfilePicture);
-
-// @route   GET /api/upload/documents
-// @desc    Get current user's documents
-// @access  Private
-router.get('/documents', authenticateToken, getUserDocuments);
-
-// @route   GET /api/upload/stats
-// @desc    Get upload statistics for current user
-// @access  Private
-router.get('/stats', authenticateToken, getUploadStats);
-
-// @route   GET /api/upload/document/:documentId/download
-// @desc    Download a document
-// @access  Private
-router.get('/document/:documentId/download', authenticateToken, downloadDocument);
-
-// @route   DELETE /api/upload/document/:documentId
-// @desc    Delete a document
-// @access  Private
-router.delete('/document/:documentId', authenticateToken, deleteDocument);
-
-// @route   DELETE /api/upload/documents/bulk
-// @desc    Bulk delete documents
-// @access  Private
-router.delete('/documents/bulk', authenticateToken, bulkDeleteDocuments);
-
-// @route   GET /api/upload/file/:filename
-// @desc    Serve uploaded files (for development)
-// @access  Public (but files are named with user IDs for security)
-router.get('/file/:filename', serveFile);
-
-// Error handling for multer
-router.use((error, req, res, next) => {
-    if (error instanceof multer.MulterError) {
-        if (error.code === 'LIMIT_FILE_SIZE') {
-            return res.status(413).json({
-                success: false,
-                message: 'File too large. Maximum size is 5MB.'
-            });
-        }
-        if (error.code === 'LIMIT_FILE_COUNT') {
-            return res.status(400).json({
-                success: false,
-                message: 'Too many files. Maximum 5 files per upload.'
-            });
-        }
-        if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-            return res.status(400).json({
-                success: false,
-                message: 'Unexpected file field.'
-            });
-        }
-    }
-    
-    if (error.message.includes('Invalid file type')) {
-        return res.status(400).json({
-            success: false,
-            message: error.message
-        });
-    }
-
-    next(error);
-});
-
-module.exports = router;
+                        
