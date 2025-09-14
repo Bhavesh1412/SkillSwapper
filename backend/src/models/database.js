@@ -13,9 +13,9 @@ const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0,
     // Security and performance settings
-    acquireTimeout: 60000,
-    timeout: 60000,
-    reconnect: true,
+    // acquireTimeout: 60000,
+    // timeout: 60000,
+    // reconnect: true,
     // SSL settings for production..
     ssl:
         process.env.NODE_ENV === "production"
