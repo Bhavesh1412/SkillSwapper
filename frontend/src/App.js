@@ -11,7 +11,7 @@ import { SkillProvider } from './contexts/SkillContext';
 
 // Components
 import Navbar from './components/layout/Navbar';
-import Footer from './components/layout/Footer';
+import Footer from './components/layout/footer';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
