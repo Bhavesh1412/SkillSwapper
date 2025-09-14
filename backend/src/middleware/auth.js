@@ -55,7 +55,7 @@ const authenticateToken = async (req, res, next) => {
         }
 
         //get user + attach to request 
-        const user = await User.findById(decoded.UserId);
+        const user = await User.findById(decoded.userId);
         if (!user) {
             return res.status(401).json({
                 success: false,
