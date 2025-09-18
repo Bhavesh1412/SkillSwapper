@@ -43,7 +43,12 @@ const MatchesPage = () => {
           <Users className="h-6 w-6 mr-2 text-primary-500" /> Skill Matches
         </h2>
         {loading && (
-          <div className="text-gray-600">Loading matches...</div>
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
+              <div className="text-gray-600">Loading matches...</div>
+            </div>
+          </div>
         )}
         {!loading && error && (
           <div className="text-red-600">{error}</div>
@@ -82,7 +87,7 @@ const MatchesPage = () => {
                       Score: {details.matchScore || 0}
                     </span>
                     <Link
-                      to={`/profile/${user.id}`}
+                      to={`/user/${user.id}`}
                       className="px-3 py-1 text-sm bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
                     >
                       View Profile
