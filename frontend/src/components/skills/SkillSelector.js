@@ -98,6 +98,12 @@ const SkillSelector = ({
           value={searchTerm}
           onChange={handleInputChange}
           onFocus={() => searchTerm && setIsOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              console.log('SkillSelector: Enter pressed, preventing form submission');
+            }
+          }}
           placeholder={placeholder}
           className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />

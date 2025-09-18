@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const EditProfilePage = () => {
-  const { user, updateProfile, isAuthenticated } = useAuth();
+  const { user, updateUserProfile, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm({
     defaultValues: {
@@ -20,7 +20,7 @@ const EditProfilePage = () => {
   }, [isAuthenticated, navigate]);
 
   const onSubmit = async (data) => {
-    await updateProfile(data);
+    await updateUserProfile(data);
     navigate('/profile');
   };
 

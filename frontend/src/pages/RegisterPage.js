@@ -22,7 +22,9 @@ const RegisterPage = () => {
 
   // Redirect authenticated users
   useEffect(() => {
+    console.log('RegisterPage: useEffect isAuthenticated:', isAuthenticated);
     if (isAuthenticated) {
+      console.log('RegisterPage: redirecting to dashboard due to isAuthenticated');
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
@@ -63,7 +65,9 @@ const RegisterPage = () => {
 
   const nextStep = async () => {
     const isValid = await validateCurrentStep();
+    console.log('RegisterPage: nextStep called, currentStep:', currentStep, 'isValid:', isValid);
     if (isValid && currentStep < 3) {
+      console.log('RegisterPage: setting step to:', currentStep + 1);
       setCurrentStep(currentStep + 1);
     }
   };
@@ -75,6 +79,9 @@ const RegisterPage = () => {
   };
 
   const onSubmit = async (data) => {
+    console.log('RegisterPage: onSubmit called with data:', data);
+    console.log('RegisterPage: selectedSkillsHave:', selectedSkillsHave);
+    console.log('RegisterPage: selectedSkillsWant:', selectedSkillsWant);
     try {
       const userData = {
         name: data.name,
@@ -86,17 +93,22 @@ const RegisterPage = () => {
         skills_want: selectedSkillsWant
       };
 
+      console.log('RegisterPage: calling registerUser with:', userData);
       const result = await registerUser(userData);
-      
+      console.log('RegisterPage: registerUser result:', result);
+
       if (result.success) {
+        console.log('RegisterPage: registration successful, navigating to dashboard');
         navigate('/dashboard', { replace: true });
       } else {
+        console.log('RegisterPage: registration failed:', result.message);
         setError('root', {
           type: 'manual',
           message: result.message || 'Registration failed. Please try again.'
         });
       }
     } catch (error) {
+      console.log('RegisterPage: onSubmit error:', error);
       setError('root', {
         type: 'manual',
         message: 'An unexpected error occurred. Please try again.'
@@ -186,7 +198,7 @@ const RegisterPage = () => {
         </div>
 
         {/* Registration Form */}
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        <form className="mt-8 space-y-6">
           {/* Root Error Message */}
           {errors.root && (
             <div className="rounded-md bg-error-50 border border-error-200 p-4 animate-fade-in">
@@ -437,6 +449,7 @@ const RegisterPage = () => {
           {/* Step 3: Skills */}
           {currentStep === 3 && (
             <div className="space-y-6 animate-fade-in">
+              {console.log('RegisterPage: rendering step 3')}
               <h3 className="text-lg font-medium text-gray-900 mb-4">Your Skills</h3>
               
               {/* Skills I Have */}
@@ -535,7 +548,8 @@ const RegisterPage = () => {
               </button>
             ) : (
               <button
-                type="submit"
+                type="button"
+                onClick={handleSubmit(onSubmit)}
                 disabled={isSubmitting || loading}
                 className="flex items-center px-6 py-2 text-sm font-medium text-white bg-gradient-to-r from-primary-500 to-secondary-500 border border-transparent rounded-lg hover:from-primary-600 hover:to-secondary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
               >

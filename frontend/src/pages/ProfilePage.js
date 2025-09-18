@@ -27,7 +27,7 @@ const ProfilePage = () => {
           <p><strong>Location:</strong> {user.location || 'N/A'}</p>
         </div>
         <button
-          onClick={() => navigate('/edit-profile')}
+          onClick={() => navigate('/profile/edit')}
           className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
         >
           <Edit className="h-4 w-4 mr-2" /> Edit Profile
