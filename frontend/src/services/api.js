@@ -123,6 +123,24 @@ export const matchAPI = {
   getStatistics: () => API.get('/matches/statistics'),
 };
 
+// Notifications API
+export const notificationAPI = {
+  // Get user's notifications
+  getNotifications: (params) => API.get('/notifications', { params }),
+  
+  // Get unread notification count
+  getUnreadCount: () => API.get('/notifications/unread-count'),
+  
+  // Mark notification as read
+  markAsRead: (notificationId) => API.put(`/notifications/${notificationId}/read`),
+  
+  // Mark all notifications as read
+  markAllAsRead: () => API.put('/notifications/mark-all-read'),
+  
+  // Delete notification
+  deleteNotification: (notificationId) => API.delete(`/notifications/${notificationId}`),
+};
+
 // Upload API
 export const uploadAPI = {
   // Upload documents

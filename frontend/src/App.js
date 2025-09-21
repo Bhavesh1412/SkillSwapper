@@ -8,6 +8,7 @@ import { Toaster } from 'react-hot-toast';
 // Context Providers
 import { AuthProvider } from './contexts/AuthContext';
 import { SkillProvider } from './contexts/SkillContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -34,8 +35,9 @@ function App() {
     <Router>
       <AuthProvider>
         <SkillProvider>
-          <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-            <Navbar />
+          <NotificationProvider>
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+              <Navbar />
             
             <main className="flex-1">
               <Routes>
@@ -110,7 +112,8 @@ function App() {
                 },
               }}
             />
-          </div>
+            </div>
+          </NotificationProvider>
         </SkillProvider>
       </AuthProvider>
     </Router>

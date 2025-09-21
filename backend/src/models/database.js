@@ -285,6 +285,95 @@ const Document = {
     },
 };
 
+// Notification model
+const Notification = {
+    // Create a new notification
+    async create(notificationData) {
+        const { user_id, from_user_id, type, title, message, data } = notificationData;
+        const sql = `
+            INSERT INTO notifications (user_id, from_user_id, type, title, message, data) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+
+        const result = await query(sql, [
+            user_id,
+            from_user_id || null,
+            type,
+            title,
+            message,
+            data ? JSON.stringify(data) : null,
+        ]);
+        return result.insertId;
+    },
+
+    // Get user's notifications
+    async getByUserId(userId, options = {}) {
+        const { limit = 20, offset = 0, unreadOnly = false } = options;
+        
+        let sql = `
+            SELECT n.*, u.name as from_user_name, u.profile_pic as from_user_pic
+            FROM notifications n
+            LEFT JOIN users u ON n.from_user_id = u.id
+            WHERE n.user_id = ?
+        `;
+        
+        const params = [userId];
+        
+        if (unreadOnly) {
+            sql += ' AND n.is_read = FALSE';
+        }
+        
+        sql += ' ORDER BY n.created_at DESC LIMIT ? OFFSET ?';
+        params.push(limit, offset);
+        
+        return await query(sql, params);
+    },
+
+    // Get unread notification count
+    async getUnreadCount(userId) {
+        const sql = `
+            SELECT COUNT(*) as count 
+            FROM notifications 
+            WHERE user_id = ? AND is_read = FALSE
+        `;
+        
+        const result = await query(sql, [userId]);
+        return result[0].count;
+    },
+
+    // Mark notification as read
+    async markAsRead(notificationId, userId) {
+        const sql = `
+            UPDATE notifications 
+            SET is_read = TRUE, read_at = CURRENT_TIMESTAMP 
+            WHERE id = ? AND user_id = ?
+        `;
+        
+        await query(sql, [notificationId, userId]);
+    },
+
+    // Mark all notifications as read for a user
+    async markAllAsRead(userId) {
+        const sql = `
+            UPDATE notifications 
+            SET is_read = TRUE, read_at = CURRENT_TIMESTAMP 
+            WHERE user_id = ? AND is_read = FALSE
+        `;
+        
+        await query(sql, [userId]);
+    },
+
+    // Delete notification
+    async delete(notificationId, userId) {
+        const sql = `
+            DELETE FROM notifications 
+            WHERE id = ? AND user_id = ?
+        `;
+        
+        await query(sql, [notificationId, userId]);
+    },
+};
+
 // Initialize database connection
 testConnection();
 
@@ -296,4 +385,5 @@ module.exports = {
     Skill,
     Match,
     Document,
+    Notification,
 };

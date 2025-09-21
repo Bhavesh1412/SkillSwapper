@@ -2,6 +2,7 @@
 // Matching system controller for finding and managing skill matches
 
 const { Match, User, query } = require('../models/database');
+const { createConnectionRequestNotification } = require('./notificationController');
 
 /**
  * Get recommended matches for current user
@@ -366,6 +367,14 @@ const saveMatch = async (req, res) => {
 
         // Save the match
         await Match.create(user1Id, targetUserId, matchedSkills);
+
+        // Create notification for the target user
+        try {
+            await createConnectionRequestNotification(user1Id, targetUserId, matchedSkills);
+        } catch (notificationError) {
+            console.error('Failed to create notification:', notificationError);
+            // Don't fail the whole request if notification creation fails
+        }
 
         res.json({
             success: true,

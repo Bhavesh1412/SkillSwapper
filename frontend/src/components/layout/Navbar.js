@@ -3,9 +3,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, User, Settings, LogOut, Search, Bell } from 'lucide-react';
+import { Menu, X, User, Settings, LogOut, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getImageUrl } from '../../services/api';
+import NotificationDropdown from '../notifications/NotificationDropdown';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -108,9 +109,7 @@ const Navbar = () => {
                 </div>
 
                 {/* Notifications */}
-                <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                  <Bell className="h-5 w-5" />
-                </button>
+                <NotificationDropdown />
 
                 {/* Profile Dropdown */}
                 <div className="relative profile-dropdown">
