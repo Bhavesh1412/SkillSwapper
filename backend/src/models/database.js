@@ -248,6 +248,45 @@ const Match = {
 
         await query(sql, [user1Id, user2Id, JSON.stringify(matchedSkills)]);
     },
+
+    // Accept a pending match between two users (in any direction)
+    async accept(userAId, userBId) {
+        const sql = `
+            UPDATE matches
+            SET status = 'accepted', updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'pending' AND (
+                (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
+            )
+        `;
+        const result = await query(sql, [userAId, userBId, userBId, userAId]);
+        return result.affectedRows > 0;
+    },
+
+    // Decline a pending match between two users (in any direction)
+    async decline(userAId, userBId) {
+        const sql = `
+            UPDATE matches
+            SET status = 'declined', updated_at = CURRENT_TIMESTAMP
+            WHERE status = 'pending' AND (
+                (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
+            )
+        `;
+        const result = await query(sql, [userAId, userBId, userBId, userAId]);
+        return result.affectedRows > 0;
+    },
+
+    // Check if two users have an accepted connection
+    async areConnected(userAId, userBId) {
+        const sql = `
+            SELECT id FROM matches
+            WHERE status = 'accepted' AND (
+                (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)
+            )
+            LIMIT 1
+        `;
+        const rows = await query(sql, [userAId, userBId, userBId, userAId]);
+        return rows.length > 0;
+    },
 };
 
 // Document model

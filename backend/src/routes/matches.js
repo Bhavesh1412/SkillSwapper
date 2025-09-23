@@ -2,7 +2,7 @@
 // Skill matching system routes
 
 const express = require('express');
-const { Match, User } = require('../models/database');
+const { Match, User, Notification, query } = require('../models/database');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -209,6 +209,23 @@ router.post('/save', authenticateToken, async (req, res) => {
         // Save the match
         await Match.create(user1Id, user2Id, matchedSkills);
 
+        // Create a notification for the target user about the request
+        try {
+            await Notification.create({
+                user_id: targetUser.id,
+                from_user_id: user1Id,
+                type: 'connection_request',
+                title: 'New Connection Request',
+                message: `${currentUser.name} wants to connect for skill swapping!`,
+                data: {
+                    fromUser: { id: currentUser.id, name: currentUser.name, profile_pic: currentUser.profile_pic },
+                    matchData: matchedSkills
+                }
+            });
+        } catch (e) {
+            console.error('Failed to create request notification', e);
+        }
+
         res.json({
             success: true,
             message: 'Match saved successfully',
@@ -226,6 +243,88 @@ router.post('/save', authenticateToken, async (req, res) => {
             success: false,
             message: 'Failed to save match'
         });
+    }
+});
+
+// @route   POST /api/matches/accept
+// @desc    Accept a pending connection request
+// @access  Private
+router.post('/accept', authenticateToken, async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const { userId } = req.body; // other user id
+        const otherUserId = parseInt(userId);
+        if (!otherUserId || otherUserId === currentUserId) {
+            return res.status(400).json({ success: false, message: 'Invalid user ID' });
+        }
+
+        const ok = await Match.accept(currentUserId, otherUserId);
+        if (!ok) {
+            return res.status(404).json({ success: false, message: 'No pending request found' });
+        }
+
+        // Notify the requester
+        const [currentUser] = await Promise.all([
+            User.findById(currentUserId)
+        ]);
+        try {
+            await Notification.create({
+                user_id: otherUserId,
+                from_user_id: currentUserId,
+                type: 'connection_accepted',
+                title: 'Connection Accepted',
+                message: `${currentUser.name} accepted your connection request.`,
+                data: { fromUser: { id: currentUser.id, name: currentUser.name, profile_pic: currentUser.profile_pic } }
+            });
+        } catch (e) {
+            console.error('Failed to create accepted notification', e);
+        }
+
+        res.json({ success: true, message: 'Connection request accepted' });
+    } catch (error) {
+        console.error('Accept request error:', error);
+        res.status(500).json({ success: false, message: 'Failed to accept request' });
+    }
+});
+
+// @route   POST /api/matches/decline
+// @desc    Decline a pending connection request
+// @access  Private
+router.post('/decline', authenticateToken, async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const { userId } = req.body; // other user id
+        const otherUserId = parseInt(userId);
+        if (!otherUserId || otherUserId === currentUserId) {
+            return res.status(400).json({ success: false, message: 'Invalid user ID' });
+        }
+
+        const ok = await Match.decline(currentUserId, otherUserId);
+        if (!ok) {
+            return res.status(404).json({ success: false, message: 'No pending request found' });
+        }
+
+        // Notify the requester
+        const [currentUser] = await Promise.all([
+            User.findById(currentUserId)
+        ]);
+        try {
+            await Notification.create({
+                user_id: otherUserId,
+                from_user_id: currentUserId,
+                type: 'connection_declined',
+                title: 'Connection Declined',
+                message: `${currentUser.name} declined your connection request.`,
+                data: { fromUser: { id: currentUser.id, name: currentUser.name, profile_pic: currentUser.profile_pic } }
+            });
+        } catch (e) {
+            console.error('Failed to create declined notification', e);
+        }
+
+        res.json({ success: true, message: 'Connection request declined' });
+    } catch (error) {
+        console.error('Decline request error:', error);
+        res.status(500).json({ success: false, message: 'Failed to decline request' });
     }
 });
 

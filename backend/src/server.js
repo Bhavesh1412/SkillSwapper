@@ -46,9 +46,12 @@ const authLimiter = rateLimit({
     skipSuccessfulRequests: true,
 });
 
-// Apply rate limiting
-app.use('/api/auth', authLimiter);
-app.use('/api/', limiter);
+// Apply rate limiting (only in production to avoid 429s during development)
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction) {
+    app.use('/api/auth', authLimiter);
+    app.use('/api/', limiter);
+}
 
 // CORS configuarat
 app.use(cors({

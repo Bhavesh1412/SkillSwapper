@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bell, X, Check, Trash2, User, MessageSquare } from 'lucide-react';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useNavigate } from 'react-router-dom';
-import { getImageUrl } from '../../services/api';
+import { getImageUrl, matchAPI } from '../../services/api';
 
 const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -60,6 +60,24 @@ const NotificationDropdown = () => {
   const handleDeleteNotification = async (e, notificationId) => {
     e.stopPropagation();
     await deleteNotification(notificationId);
+  };
+
+  const handleAccept = async (e, notification) => {
+    e.stopPropagation();
+    const otherId = notification?.data?.fromUser?.id;
+    if (!otherId) return;
+    await matchAPI.accept(otherId);
+    await markAsRead(notification.id);
+    refreshNotifications();
+  };
+
+  const handleDecline = async (e, notification) => {
+    e.stopPropagation();
+    const otherId = notification?.data?.fromUser?.id;
+    if (!otherId) return;
+    await matchAPI.decline(otherId);
+    await markAsRead(notification.id);
+    refreshNotifications();
   };
 
   const getNotificationIcon = (type) => {
@@ -129,12 +147,7 @@ const NotificationDropdown = () => {
 
           {/* Notifications List */}
           <div className="max-h-96 overflow-y-auto">
-            {loading ? (
-              <div className="p-4 text-center text-gray-500">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                Loading notifications...
-              </div>
-            ) : notifications.length === 0 ? (
+            {notifications.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
                 <Bell className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                 <p>No notifications yet</p>
@@ -177,6 +190,24 @@ const NotificationDropdown = () => {
                           <div className="flex items-center space-x-1 ml-2">
                             {!notification.is_read && (
                               <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                            )}
+                            {notification.type === 'connection_request' && notification.data?.fromUser?.id && (
+                              <>
+                                <button
+                                  onClick={(e) => handleAccept(e, notification)}
+                                  className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                  title="Accept"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={(e) => handleDecline(e, notification)}
+                                  className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                  title="Decline"
+                                >
+                                  Decline
+                                </button>
+                              </>
                             )}
                             <button
                               onClick={(e) => handleDeleteNotification(e, notification.id)}

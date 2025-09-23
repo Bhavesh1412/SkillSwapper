@@ -1,6 +1,6 @@
 // User management controller for profile operations and user data
 
-const { User, Document, query } = require('../models/database');
+const { User, Document, query, Match } = require('../models/database');
 const path = require('path');
 
 /**
@@ -71,7 +71,7 @@ const getUserProfile = async (req, res) => {
             });
         }
 
-        // Public profile - don't include email unless it's the user's own profile
+        // Public profile - don't include email unless it's the user's own profile or users are connected
         const profileData = {
             id: user.id,
             name: user.name,
@@ -83,9 +83,14 @@ const getUserProfile = async (req, res) => {
             created_at: user.created_at
         };
 
-        // Include email if viewing own profile
+        // Include email if viewing own profile or there is an accepted match
         if (currentUserId === userId) {
             profileData.email = user.email;
+        } else if (currentUserId) {
+            const connected = await Match.areConnected(currentUserId, userId);
+            if (connected) {
+                profileData.email = user.email;
+            }
         }
 
         res.json({

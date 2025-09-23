@@ -118,6 +118,12 @@ export const matchAPI = {
   
   // Save a match
   saveMatch: (user2Id) => API.post('/matches/save', { user2Id }),
+
+  // Accept a connection request
+  accept: (userId) => API.post('/matches/accept', { userId }),
+
+  // Decline a connection request
+  decline: (userId) => API.post('/matches/decline', { userId }),
   
   // Get match statistics
   getStatistics: () => API.get('/matches/statistics'),
