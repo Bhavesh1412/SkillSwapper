@@ -44,3 +44,6 @@ LEFT JOIN users u_to ON n.user_id = u_to.id
 ORDER BY n.created_at DESC;
 
 
+
+
+

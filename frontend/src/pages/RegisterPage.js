@@ -125,6 +125,12 @@ const RegisterPage = () => {
     }
   };
 
+  const updateSkillLevel = (index, newLevel) => {
+    const updatedSkills = [...selectedSkillsHave];
+    updatedSkills[index].level = newLevel;
+    setSelectedSkillsHave(updatedSkills);
+  };
+
   const addSkillToWant = (skill) => {
     if (!selectedSkillsWant.find(s => s.name === skill.skill_name)) {
       setSelectedSkillsWant([...selectedSkillsWant, {
@@ -466,20 +472,31 @@ const RegisterPage = () => {
                 
                 {/* Selected Skills Have */}
                 {selectedSkillsHave.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 space-y-2">
                     {selectedSkillsHave.map((skill, index) => (
                       <div
                         key={index}
-                        className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary-100 text-primary-800"
+                        className="flex items-center justify-between p-2 rounded-lg bg-primary-50 border border-primary-200"
                       >
-                        {skill.name}
-                        <button
-                          type="button"
-                          onClick={() => removeSkillFromHave(index)}
-                          className="ml-2 hover:text-primary-600"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
+                        <span className="text-sm font-medium text-primary-800">{skill.name}</span>
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={skill.level}
+                            onChange={(e) => updateSkillLevel(index, e.target.value)}
+                            className="text-xs px-2 py-1 border border-primary-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          >
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => removeSkillFromHave(index)}
+                            className="text-primary-600 hover:text-primary-800"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
