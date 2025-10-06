@@ -14,7 +14,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import LoadingSpinner from './components/ui/LoadingSpinner';
+
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -26,6 +26,7 @@ import EditProfilePage from './pages/EditProfilePage';
 import MatchesPage from './pages/MatchesPage';
 import UserProfilePage from './pages/UserProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
+import NotificationsPage from './pages/NotificationsPage';
 
 // Styles
 import './index.css';
@@ -68,6 +69,12 @@ function App() {
                 <Route path="/matches" element={
                   <ProtectedRoute>
                     <MatchesPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/notifications" element={
+                  <ProtectedRoute>
+                    <NotificationsPage />
                   </ProtectedRoute>
                 } />
                 

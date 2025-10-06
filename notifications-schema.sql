@@ -42,8 +42,3 @@ FROM notifications n
 LEFT JOIN users u_from ON n.from_user_id = u_from.id
 LEFT JOIN users u_to ON n.user_id = u_to.id
 ORDER BY n.created_at DESC;
-
-
-
-
-

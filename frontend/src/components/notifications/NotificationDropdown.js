@@ -110,7 +110,11 @@ const NotificationDropdown = () => {
     <div className="relative" ref={dropdownRef}>
       {/* Notification Bell Icon */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          // Go straight to full notifications page
+          navigate('/notifications');
+          setIsOpen(false);
+        }}
         className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
       >
         <Bell className="h-6 w-6" />
