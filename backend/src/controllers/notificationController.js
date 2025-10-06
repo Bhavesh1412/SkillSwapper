@@ -24,12 +24,26 @@ const getNotifications = async (req, res) => {
         // Get unread count
         const unreadCount = await Notification.getUnreadCount(userId);
 
-        // Process notifications to parse JSON data
-        const processedNotifications = notifications.map(notification => ({
-            ...notification,
-            data: notification.data ? JSON.parse(notification.data) : null,
-            timeAgo: getTimeAgo(notification.created_at)
-        }));
+        // Process notifications to parse JSON data (handle already-parsed JSON as well)
+        const processedNotifications = notifications.map(notification => {
+            let parsedData = null;
+            if (notification.data !== null && notification.data !== undefined) {
+                try {
+                    parsedData = typeof notification.data === 'string'
+                        ? JSON.parse(notification.data)
+                        : notification.data; // already an object from DB JSON type
+                } catch (e) {
+                    // Fallback to raw value if parsing fails
+                    parsedData = notification.data;
+                }
+            }
+
+            return {
+                ...notification,
+                data: parsedData,
+                timeAgo: getTimeAgo(notification.created_at)
+            };
+        });
 
         res.json({
             success: true,
@@ -49,7 +63,7 @@ const getNotifications = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch notifications',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            error: error?.message || 'Unknown error'
         });
     }
 };
@@ -73,7 +87,7 @@ const getUnreadCount = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to get unread count',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            error: error?.message || 'Unknown error'
         });
     }
 };
@@ -106,7 +120,7 @@ const markAsRead = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to mark notification as read',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            error: error?.message || 'Unknown error'
         });
     }
 };
@@ -130,7 +144,7 @@ const markAllAsRead = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to mark all notifications as read',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            error: error?.message || 'Unknown error'
         });
     }
 };
@@ -163,7 +177,7 @@ const deleteNotification = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete notification',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            error: error?.message || 'Unknown error'
         });
     }
 };

@@ -44,8 +44,9 @@ const query = async (sql, params = []) => {
         const [rows] = await pool.execute(sql, params);
         return rows;
     } catch (error) {
-        console.error("Database query error:", error.message);
-        throw new Error("Database operation failed");
+        // Log full error for debugging and rethrow the original error so controllers can report useful details
+        console.error("Database query error:", error);
+        throw error;
     }
 };
 
@@ -347,24 +348,27 @@ const Notification = {
 
     // Get user's notifications
     async getByUserId(userId, options = {}) {
-        const { limit = 20, offset = 0, unreadOnly = false } = options;
-        
+        // Defensive coercion to integers to avoid injection when interpolating
+        const limit = Math.min(Math.max(parseInt(options.limit) || 20, 1), 100);
+        const offset = Math.max(parseInt(options.offset) || 0, 0);
+        const unreadOnly = options.unreadOnly === true || options.unreadOnly === 'true';
+
         let sql = `
             SELECT n.*, u.name as from_user_name, u.profile_pic as from_user_pic
             FROM notifications n
             LEFT JOIN users u ON n.from_user_id = u.id
             WHERE n.user_id = ?
         `;
-        
+
         const params = [userId];
-        
+
         if (unreadOnly) {
             sql += ' AND n.is_read = FALSE';
         }
-        
-        sql += ' ORDER BY n.created_at DESC LIMIT ? OFFSET ?';
-        params.push(limit, offset);
-        
+
+        // Some MySQL/MariaDB setups don't allow placeholders in LIMIT/OFFSET
+        sql += ` ORDER BY n.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+
         return await query(sql, params);
     },
 

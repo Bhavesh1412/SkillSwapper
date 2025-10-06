@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { notificationAPI } from '../services/api';
 
@@ -20,21 +20,21 @@ export const NotificationProvider = ({ children }) => {
   const [error, setError] = useState('');
 
   // Fetch notifications
-  const fetchNotifications = async (options = {}) => {
+  const fetchNotifications = useCallback(async (options = {}) => {
     if (!isAuthenticated) return;
 
     try {
       setLoading(true);
       setError('');
       
-      const response = await notificationAPI.getNotifications({
+      const res = await notificationAPI.getNotifications({
         limit: options.limit || 20,
         offset: options.offset || 0,
         unreadOnly: options.unreadOnly || false
       });
-      
-      setNotifications(response.data.notifications);
-      setUnreadCount(response.data.unreadCount);
+      // res is the parsed server JSON: { success, data: { notifications, unreadCount, ... } }
+      setNotifications(res.data.notifications || []);
+      setUnreadCount(res.data.unreadCount || 0);
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || 'Failed to fetch notifications';
       setError(msg);
@@ -42,22 +42,22 @@ export const NotificationProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
   // Fetch unread count only
-  const fetchUnreadCount = async () => {
+  const fetchUnreadCount = useCallback(async () => {
     if (!isAuthenticated) return;
 
     try {
-      const response = await notificationAPI.getUnreadCount();
-      setUnreadCount(response.data.unreadCount);
+      const res = await notificationAPI.getUnreadCount();
+      setUnreadCount(res.data.unreadCount || 0);
     } catch (err) {
       console.error('Fetch unread count error:', err);
     }
-  };
+  }, [isAuthenticated]);
 
   // Mark notification as read
-  const markAsRead = async (notificationId) => {
+  const markAsRead = useCallback(async (notificationId) => {
     try {
       await notificationAPI.markAsRead(notificationId);
       
@@ -77,10 +77,10 @@ export const NotificationProvider = ({ children }) => {
       setError(msg);
       console.error('Mark as read error:', err);
     }
-  };
+  }, []);
 
   // Mark all notifications as read
-  const markAllAsRead = async () => {
+  const markAllAsRead = useCallback(async () => {
     try {
       await notificationAPI.markAllAsRead();
       
@@ -99,10 +99,10 @@ export const NotificationProvider = ({ children }) => {
       setError(msg);
       console.error('Mark all as read error:', err);
     }
-  };
+  }, []);
 
   // Delete notification
-  const deleteNotification = async (notificationId) => {
+  const deleteNotification = useCallback(async (notificationId) => {
     try {
       await notificationAPI.deleteNotification(notificationId);
       
@@ -119,12 +119,12 @@ export const NotificationProvider = ({ children }) => {
       setError(msg);
       console.error('Delete notification error:', err);
     }
-  };
+  }, [notifications]);
 
   // Refresh notifications
-  const refreshNotifications = () => {
+  const refreshNotifications = useCallback(() => {
     fetchNotifications();
-  };
+  }, [fetchNotifications]);
 
   // Auto-fetch notifications when user logs in
   useEffect(() => {
@@ -136,7 +136,7 @@ export const NotificationProvider = ({ children }) => {
       setUnreadCount(0);
       setError('');
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, fetchNotifications]);
 
   // Poll for new notifications every 30 seconds when authenticated
   useEffect(() => {
@@ -147,7 +147,7 @@ export const NotificationProvider = ({ children }) => {
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchUnreadCount]);
 
   const value = {
     notifications,
