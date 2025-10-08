@@ -1,6 +1,7 @@
 // Matching system controller for finding and managing skill matches
 
 const { Match, User, query } = require('../models/database');
+const emailService = require('../services/emailService');
 const { createConnectionRequestNotification } = require('./notificationController');
 
 /**
@@ -536,6 +537,37 @@ const updateMatchStatus = async (req, res) => {
             'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
             [status, matchId]
         );
+
+        // When a match is accepted, send emails to both parties
+        if (status === 'accepted') {
+            try {
+                const requesterId = match.user1_id; // initiator when match was created
+                const accepterId = userId === match.user1_id ? match.user2_id : userId;
+
+                const [requester, accepter] = await Promise.all([
+                    User.findById(requesterId),
+                    User.findById(accepterId)
+                ]);
+
+                const matchDetails = (() => {
+                    try {
+                        return typeof match.matched_skills === 'string' 
+                            ? JSON.parse(match.matched_skills) 
+                            : match.matched_skills || {};
+                    } catch (_) {
+                        return {};
+                    }
+                })();
+
+                // Send emails in parallel, but don't block response on failures
+                await Promise.all([
+                    emailService.sendConnectionAcceptedToRequester(requester, accepter, matchDetails),
+                    emailService.sendConnectionAcceptedToAccepter(accepter, requester, matchDetails)
+                ]);
+            } catch (emailError) {
+                console.error('Error sending acceptance emails:', emailError);
+            }
+        }
 
         res.json({
             success: true,

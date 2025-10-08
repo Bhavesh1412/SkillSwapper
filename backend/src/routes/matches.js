@@ -3,6 +3,7 @@
 
 const express = require('express');
 const { Match, User, Notification, query } = require('../models/database');
+const emailService = require('../services/emailService');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -251,6 +252,7 @@ router.post('/save', authenticateToken, async (req, res) => {
 // @access  Private
 router.post('/accept', authenticateToken, async (req, res) => {
     try {
+        console.log('POST /api/matches/accept called');
         const currentUserId = req.user.id;
         const { userId } = req.body; // other user id
         const otherUserId = parseInt(userId);
@@ -278,6 +280,37 @@ router.post('/accept', authenticateToken, async (req, res) => {
             });
         } catch (e) {
             console.error('Failed to create accepted notification', e);
+        }
+
+        // Send acceptance emails to both parties
+        try {
+            const [requester, accepter] = await Promise.all([
+                User.findById(otherUserId), // requester (who sent the request)
+                User.findById(currentUserId) // accepter (current user)
+            ]);
+
+            // Fetch matched skills between the two users for email templates
+            const matches = await query(
+                'SELECT matched_skills FROM matches WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?) ORDER BY updated_at DESC LIMIT 1',
+                [currentUserId, otherUserId, otherUserId, currentUserId]
+            );
+
+            let matchDetails = {};
+            if (matches && matches.length > 0) {
+                try {
+                    matchDetails = JSON.parse(matches[0].matched_skills);
+                } catch (_) {
+                    matchDetails = {};
+                }
+            }
+
+            await Promise.all([
+                emailService.sendConnectionAcceptedToRequester(requester, accepter, matchDetails),
+                emailService.sendConnectionAcceptedToAccepter(accepter, requester, matchDetails)
+            ]);
+            console.log('Acceptance emails dispatched');
+        } catch (emailErr) {
+            console.error('Error dispatching acceptance emails:', emailErr);
         }
 
         res.json({ success: true, message: 'Connection request accepted' });
