@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
-import { Eye, EyeOff, Mail, Lock, User, MapPin, ArrowRight, ArrowLeft, Plus, X, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, MapPin, ArrowRight, ArrowLeft, Plus, X, AlertCircle, Upload, File, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSkills } from '../contexts/SkillContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -15,6 +15,8 @@ const RegisterPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [selectedSkillsHave, setSelectedSkillsHave] = useState([]);
   const [selectedSkillsWant, setSelectedSkillsWant] = useState([]);
+  const [certificates, setCertificates] = useState([]);
+  const [uploading, setUploading] = useState(false);
   
   const { register: registerUser, loading, isAuthenticated } = useAuth();
   const { allSkills, loadAllSkills } = useSkills();
@@ -82,6 +84,7 @@ const RegisterPage = () => {
     console.log('RegisterPage: onSubmit called with data:', data);
     console.log('RegisterPage: selectedSkillsHave:', selectedSkillsHave);
     console.log('RegisterPage: selectedSkillsWant:', selectedSkillsWant);
+    console.log('RegisterPage: certificates:', certificates);
     try {
       const userData = {
         name: data.name,
@@ -98,6 +101,37 @@ const RegisterPage = () => {
       console.log('RegisterPage: registerUser result:', result);
 
       if (result.success) {
+        // Upload certificates after successful registration
+        if (certificates.length > 0) {
+          try {
+            const token = localStorage.getItem('skillswapper_token');
+            const uploadPromises = certificates.map(async (cert) => {
+              const formData = new FormData();
+              formData.append('documents', cert.file);
+
+              const response = await fetch('/api/upload/document', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+
+              if (!response.ok) {
+                throw new Error('Upload failed');
+              }
+
+              return await response.json();
+            });
+
+            await Promise.all(uploadPromises);
+            console.log('Certificates uploaded successfully');
+          } catch (uploadError) {
+            console.error('Certificate upload error:', uploadError);
+            // Don't fail registration if certificate upload fails
+          }
+        }
+
         console.log('RegisterPage: registration successful, navigating to dashboard');
         navigate('/dashboard', { replace: true });
       } else {
@@ -146,6 +180,38 @@ const RegisterPage = () => {
 
   const removeSkillFromWant = (index) => {
     setSelectedSkillsWant(selectedSkillsWant.filter((_, i) => i !== index));
+  };
+
+  // Certificate upload functions
+  const handleCertificateUpload = async (event) => {
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+    try {
+      // Store files locally for upload after registration
+      const fileObjects = files.map(file => ({
+        file: file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        id: Date.now() + Math.random()
+      }));
+      
+      setCertificates([...certificates, ...fileObjects]);
+    } catch (error) {
+      console.error('Certificate selection error:', error);
+      setError('root', {
+        type: 'manual',
+        message: 'Failed to select certificates. Please try again.'
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeCertificate = (index) => {
+    setCertificates(certificates.filter((_, i) => i !== index));
   };
 
   return (
@@ -448,6 +514,77 @@ const RegisterPage = () => {
                     {errors.location.message}
                   </p>
                 )}
+              </div>
+
+              {/* Certificate Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Certificates <span className="text-gray-400">(optional)</span>
+                </label>
+                <div className="space-y-3">
+                  {/* Upload Button */}
+                  <div className="flex items-center justify-center w-full">
+                    <label
+                      htmlFor="certificate-upload"
+                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                        uploading
+                          ? 'border-primary-300 bg-primary-50'
+                          : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        {uploading ? (
+                          <LoadingSpinner size="sm" className="text-primary-600" />
+                        ) : (
+                          <Upload className="w-8 h-8 mb-2 text-gray-400" />
+                        )}
+                        <p className="mb-2 text-sm text-gray-500">
+                          <span className="font-semibold">Click to upload</span> certificates
+                        </p>
+                        <p className="text-xs text-gray-500">PDF, DOC, DOCX, JPG, PNG (MAX. 5MB each)</p>
+                      </div>
+                      <input
+                        id="certificate-upload"
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        onChange={handleCertificateUpload}
+                        className="hidden"
+                        disabled={uploading}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Uploaded Certificates */}
+                  {certificates.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Selected Certificates:</p>
+                      {certificates.map((cert, index) => (
+                        <div
+                          key={cert.id || index}
+                          className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <File className="h-5 w-5 text-gray-400" />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{cert.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {(cert.size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeCertificate(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

@@ -246,11 +246,13 @@ router.delete('/document/:documentId', authenticateToken, async (req, res) => {
 });
 
 // @route   GET /api/upload/documents
-// @desc    Get current user's documents
+// @desc    Get user's documents (current user or specified user)
 // @access  Private
 router.get('/documents', authenticateToken, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.query.userId ? parseInt(req.query.userId) : req.user.id;
+        
+        // Allow users to view their own documents or other users' documents
         const documents = await Document.getByUserId(userId);
 
         res.json({

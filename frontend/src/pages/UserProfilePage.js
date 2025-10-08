@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, User, BookOpen, Target } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, User, BookOpen, Target, File, Download } from 'lucide-react';
 import { userAPI, matchAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -15,6 +15,7 @@ const UserProfilePage = () => {
   const [matchDetails, setMatchDetails] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState('');
+  const [documents, setDocuments] = useState([]);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -25,6 +26,21 @@ const UserProfilePage = () => {
         // Fetch user profile
         const profileResponse = await userAPI.getProfile(userId);
         setUser(profileResponse.data.user);
+
+        // Fetch user documents
+        try {
+          const documentsResponse = await fetch(`/api/upload/documents?userId=${userId}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('skillswapper_token')}`
+            }
+          });
+          if (documentsResponse.ok) {
+            const docsData = await documentsResponse.json();
+            setDocuments(docsData.data.documents || []);
+          }
+        } catch (docError) {
+          console.log('Could not fetch documents:', docError);
+        }
 
         // Fetch match details if current user is logged in
         if (currentUser && currentUser.id !== parseInt(userId)) {
@@ -230,6 +246,47 @@ const UserProfilePage = () => {
                   )}
                 </div>
               </div>
+
+              {/* Certificates */}
+              {documents.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <File className="h-5 w-5 mr-2 text-purple-600" />
+                    Certificates & Documents
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {documents.map((doc, index) => (
+                      <div key={index} className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center space-x-3">
+                            <File className="h-8 w-8 text-purple-600" />
+                            <div>
+                              <p className="font-medium text-gray-900">{doc.file_name}</p>
+                              <p className="text-sm text-gray-600">
+                                {(doc.file_size / 1024).toFixed(1)} KB
+                              </p>
+                              {doc.skill_name && (
+                                <p className="text-xs text-purple-600 mt-1">
+                                  Related to: {doc.skill_name}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <a
+                            href={`http://localhost:3001${doc.file_path}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-purple-600 hover:text-purple-800 transition-colors"
+                            title="Download document"
+                          >
+                            <Download className="h-5 w-5" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
