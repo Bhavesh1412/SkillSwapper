@@ -16,6 +16,7 @@ const skillRoutes = require('./routes/skills');
 const matchRoutes = require('./routes/matches');
 const uploadRoutes = require('./routes/upload');
 const notificationRoutes = require('./routes/notifications');
+const adminRoutes = require('./routes/admin');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -86,6 +87,7 @@ app.use('/api/skills', skillRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

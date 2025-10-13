@@ -127,6 +127,9 @@ export const matchAPI = {
   
   // Get match statistics
   getStatistics: () => API.get('/matches/statistics'),
+  
+  // Get saved matches (swap requests)
+  getSavedMatches: (params) => API.get('/matches/saved', { params }),
 };
 
 // Notifications API

@@ -427,4 +427,107 @@ router.get('/statistics', authenticateToken, async (req, res) => {
     }
 });
 
+// @route   GET /api/matches/saved
+// @desc    Get saved matches for current user
+// @access  Private
+router.get('/saved', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        console.log('Getting saved matches for user ID:', userId);
+        const { status, limit = 20, offset = 0 } = req.query;
+
+        // Validate parameters
+        const limitNum = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
+        const offsetNum = Math.max(parseInt(offset) || 0, 0);
+
+        let sql = `
+            SELECT m.*, 
+                   u1.name as user1_name, u1.profile_pic as user1_pic,
+                   u2.name as user2_name, u2.profile_pic as user2_pic
+            FROM matches m
+            JOIN users u1 ON m.user1_id = u1.id
+            JOIN users u2 ON m.user2_id = u2.id
+            WHERE (m.user1_id = ? OR m.user2_id = ?)
+        `;
+
+        const params = [userId, userId];
+
+        // Add status filter if specified
+        if (status && ['pending', 'accepted', 'declined', 'expired'].includes(status)) {
+            sql += ' AND m.status = ?';
+            params.push(status);
+        }
+
+        // Some MySQL setups don't allow placeholders for LIMIT/OFFSET; inline safe integers
+        sql += ` ORDER BY m.updated_at DESC LIMIT ${limitNum} OFFSET ${offsetNum}`;
+
+        const savedMatches = await query(sql, params);
+        console.log('Found saved matches:', savedMatches.length);
+
+        // Process matches to show the other user's information
+        const processedMatches = savedMatches.map(match => {
+            const isCurrentUserInitiator = match.user1_id === userId;
+            const otherUser = {
+                id: isCurrentUserInitiator ? match.user2_id : match.user1_id,
+                name: isCurrentUserInitiator ? match.user2_name : match.user1_name,
+                profile_pic: isCurrentUserInitiator ? match.user2_pic : match.user1_pic
+            };
+
+            // Safely parse matched_skills JSON
+            let matchDetails = {};
+            try {
+                matchDetails = match.matched_skills ? JSON.parse(match.matched_skills) : {};
+            } catch (parseError) {
+                console.error('Error parsing matched_skills for match', match.id, ':', parseError);
+                matchDetails = {};
+            }
+
+            return {
+                id: match.id,
+                otherUser,
+                matchDetails,
+                status: match.status,
+                isInitiator: isCurrentUserInitiator,
+                created_at: match.created_at,
+                updated_at: match.updated_at
+            };
+        });
+
+        // Get total count
+        let countSql = `
+            SELECT COUNT(*) as total FROM matches m 
+            WHERE (m.user1_id = ? OR m.user2_id = ?)
+        `;
+        const countParams = [userId, userId];
+
+        if (status && ['pending', 'accepted', 'declined', 'expired'].includes(status)) {
+            countSql += ' AND m.status = ?';
+            countParams.push(status);
+        }
+
+        const [{ total }] = await query(countSql, countParams);
+
+        res.json({
+            success: true,
+            data: {
+                matches: processedMatches,
+                pagination: {
+                    total: parseInt(total),
+                    limit: limitNum,
+                    offset: offsetNum,
+                    hasMore: offsetNum + limitNum < total
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Get saved matches error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch saved matches',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
 module.exports = router;

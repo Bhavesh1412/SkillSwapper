@@ -27,6 +27,10 @@ import MatchesPage from './pages/MatchesPage';
 import UserProfilePage from './pages/UserProfilePage';
 import NotFoundPage from './pages/NotFoundPage';
 import NotificationsPage from './pages/NotificationsPage';
+import SwapRequestsPage from './pages/SwapRequestsPage';
+import MySkillsPage from './pages/MySkillsPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 // Styles
 import './index.css';
@@ -77,6 +81,22 @@ function App() {
                     <NotificationsPage />
                   </ProtectedRoute>
                 } />
+
+                <Route path="/swap-requests" element={
+                  <ProtectedRoute>
+                    <SwapRequestsPage />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/my-skills" element={
+                  <ProtectedRoute>
+                    <MySkillsPage />
+                  </ProtectedRoute>
+                } />
+
+                {/* Admin Routes */}
+                <Route path="/admin/login" element={<AdminLoginPage />} />
+                <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
                 
                 <Route path="/user/:userId" element={
                   <ProtectedRoute>

@@ -48,7 +48,7 @@ const DashboardPage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                    {" "}
           <Link
-            to="/skills"
+            to="/my-skills"
             className="bg-gradient-to-br from-primary-500 to-secondary-500 text-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-transform transform hover:scale-105"
           >
                         <BookOpen className="h-8 w-8 mb-2" />           {" "}
